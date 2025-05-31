@@ -1,0 +1,126 @@
+#!/bin/bash
+
+#SBATCH --mem=48G
+#SBATCH -p workq
+#SBATCH --job-name=C_IBD
+
+#############################
+####@-------MODULE------@####
+#############################
+
+
+module load bioinfo/hap-ibd/a3fdd2d
+hapibd=/usr/local/bioinfo/src/hap-ibd/hap-ibd-a3fdd2d/hap-ibd.jar
+module load statistics/R/4.2.2
+module load bioinfo/PLINK/1.90b7
+module load bioinfo/VCFtools/0.1.16
+
+#############################
+###@------NETTOYAGE-----@###
+#############################
+
+for chr in {1..22}; do
+    vcftools --gzvcf /work/user/fxricaut/Clarence/Data/Phased_Genotype/$chr.modern.archaic.merge.biallelicSNPs.phased.vcf.gz.vcf.gz \
+             --keep /work/user/fxricaut/Clarence/IBD/Selection/KeepIBD.4.txt \
+             --exclude-bed /work/user/fxricaut/Clarence/IBD/Selection/region_a_nett2.bed \
+             --recode \
+             --out /work/user/fxricaut/Clarence/IBD/$chr.Nett
+
+    gzip /work/user/fxricaut/Clarence/IBD/$chr.Nett.recode.vcf
+done
+
+#############################
+####@-------HAP-IBD------@###
+#############################
+
+for chr in {1..22}; do
+    java -Xmx4g -jar $hapibd gt=/work/user/fxricaut/Clarence/IBD/$chr.Nett.recode.vcf.gz map=/work/user/fxricaut/Clarence/Data/HapMap_hg38/HapMap.chr$chr.GRCh38.map out=/work/user/fxricaut/Clarence/IBD/phased.ibd/modern.archaic.merge.biallelicSNPs.chr$chr.phased
+
+    gzip -d /work/user/fxricaut/Clarence/IBD/phased.ibd/modern.archaic.merge.biallelicSNPs.chr$chr.phased.ibd.gz
+done
+#############################
+###@------TRAITEMENT-----@###
+#############################
+
+for chr in {1..22}; do
+    
+    # 1-DIVISION-################
+    
+    awk '$8 >= 5' /work/user/fxricaut/Clarence/IBD/phased.ibd/modern.archaic.merge.biallelicSNPs.chr$chr.phased.ibd > /work/user/fxricaut/Clarence/IBD/SUP/$chr.IBDSup7NONsynth.txt
+    awk '$8 <= 5' /work/user/fxricaut/Clarence/IBD/phased.ibd/modern.archaic.merge.biallelicSNPs.chr$chr.phased.ibd > /work/user/fxricaut/Clarence/IBD/INF/$chr.IBDInf7NONsynth.txt
+
+    # 2-RESUME-################
+    awk '
+    {
+        if ($1 < $3)
+            key = $1"-----"$3;
+        else
+            key = $3"-----"$1;
+
+        if (key in data) {
+            data[key] = data[key] "," $NF;
+        } else {
+            data[key] = $NF;
+        }
+    }
+    END {
+        for (k in data) {
+            print k, data[k];
+        }
+    }' /work/user/fxricaut/Clarence/IBD/SUP/$chr.IBDSup7NONsynth.txt > /work/user/fxricaut/Clarence/IBD/SUP/$chr.IBDsup.txt
+
+    awk '
+    {
+        if ($1 < $3)
+            key = $1"-----"$3;
+        else
+            key = $3"-----"$1;
+
+        if (key in data) {
+            data[key] = data[key] "," $NF;
+        } else {
+            data[key] = $NF;
+        }
+    }
+    END {
+        for (k in data) {
+            print k, data[k];
+        }
+    }' /work/user/fxricaut/Clarence/IBD/INF/$chr.IBDInf7NONsynth.txt > /work/user/fxricaut/Clarence/IBD/INF/$chr.IBDinf.txt
+done
+
+#############################
+###@----CLUSTERISATION---@###
+#############################
+
+
+for cluster in {1..13}; do
+    for chr in {1..22}; do
+       
+        grep -f /work/user/fxricaut/Clarence/IBD/Selection/Selection2/Cluster.$cluster.txt /work/user/fxricaut/Clarence/IBD/SUP/$chr.IBDsup.txt > /work/user/fxricaut/Clarence/IBD/SUP/Cluster_$cluster/chr$chr.Data.$cluster.IBD.txt
+        grep -f /work/user/fxricaut/Clarence/IBD/Selection/Selection2/Cluster.$cluster.txt /work/user/fxricaut/Clarence/IBD/INF/$chr.IBDinf.txt > /work/user/fxricaut/Clarence/IBD/INF/Cluster_$cluster/chr$chr.Data.$cluster.IBD.txt
+    
+   done
+done
+
+
+for cluster in {1..13}; do
+   for chr in {1..22}; do
+     for cluster2 in {1..13}; do
+       
+          grep -f /work/user/fxricaut/Clarence/IBD/Selection/Selection2/Cluster.$cluster2.txt /work/user/fxricaut/Clarence/IBD/SUP/Cluster_$cluster/chr$chr.Data.$cluster.IBD.txt > /work/user/fxricaut/Clarence/IBD/SUP/Cluster_$cluster/Cluster_$cluster2/chr$chr.SUP.IBDFinal.txt
+          grep -f /work/user/fxricaut/Clarence/IBD/Selection/Selection2/Cluster.$cluster2.txt /work/user/fxricaut/Clarence/IBD/INF/Cluster_$cluster/chr$chr.Data.$cluster.IBD.txt > /work/user/fxricaut/Clarence/IBD/INF/Cluster_$cluster/Cluster_$cluster2/chr$chr.INF.IBDFinal.txt
+        
+        done
+    done
+done
+
+for cluster in {1..13}; do
+   for chr in {1..22}; do
+            
+grep -vFf /work/user/fxricaut/Clarence/IBD/Selection/Selection2/Remove.$cluster.txt /work/user/fxricaut/Clarence/IBD/SUP/Cluster_$cluster/chr$chr.Data.$cluster.IBD.txt > /work/user/fxricaut/Clarence/IBD/SUP/Cluster_$cluster/Cluster_$cluster/chr$chr.INTRA.SUP.IBDFinal 
+grep -vFf /work/user/fxricaut/Clarence/IBD/Selection/Selection2/Remove.$cluster.txt /work/user/fxricaut/Clarence/IBD/INF/Cluster_$cluster/chr$chr.Data.$cluster.IBD.txt > /work/user/fxricaut/Clarence/IBD/INF/Cluster_$cluster/Cluster_$cluster/chr$chr.INTRA.INF.IBDFinal
+
+        done
+    done
+done
