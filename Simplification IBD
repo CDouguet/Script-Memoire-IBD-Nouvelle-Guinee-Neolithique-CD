@@ -1,0 +1,91 @@
+#!/bin/bash
+
+#SBATCH -J C_Bash
+
+# Fonction pour traiter un cluster
+process_cluster() {
+    local SUPouINF=$1
+    local CLUSTER_NUM=$2
+
+    # Liste des dossiers à traiter
+    clusters=(
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_1"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_2"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_3"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_4"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_5"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_6"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_7"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_8"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_9"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_10"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_11"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_12"
+        "/work/user/fxricaut/Clarence/IBD/${SUPouINF}/Cluster_${CLUSTER_NUM}/Cluster_13"
+
+ )
+
+    # Tableau pour stocker les chemins des fichiers temporaires
+    temp_files=()
+
+    # Parcourir chaque dossier
+    for cluster in "${clusters[@]}"; do
+        cluster_name="${cluster##*/}"
+        temp_file="/work/user/fxricaut/Clarence/IBD/Final/Test/${SUPouINF}_Cluster_${CLUSTER_NUM}_${cluster_name}_merged_output.txt"
+        temp_files+=("$temp_file")
+        output_dir=$(dirname "$temp_file")
+
+        mkdir -p "$output_dir"
+        > "$temp_file"
+
+        # Parcourir chaque fichier dans le dossier
+        for file in "$cluster"/*; do
+            if [ -f "$file" ]; then
+                if [[ "${cluster##*/}" == "Cluster_${CLUSTER_NUM}" ]] && [[ "$file" != *INTRA* ]]; then
+                    continue
+                fi
+
+                if ! echo "$file" | grep -qE '(chr14|chr15)'; then
+                    while IFS= read -r line; do
+                        echo "${line#* }" | tr ',' '\n' >> "$temp_file"
+                    done < "$file"
+                fi
+            fi
+        done
+
+        # Ajouter le nom du cluster en tête
+        sed -i "1i\\${cluster_name}" "$temp_file"
+    done
+
+    # Harmonisation du nombre de lignes
+    max_lines=0
+    for temp_file in "${temp_files[@]}"; do
+        line_count=$(wc -l < "$temp_file")
+        if [ "$line_count" -gt "$max_lines" ]; then
+            max_lines=$line_count
+        fi
+    done
+
+    for temp_file in "${temp_files[@]}"; do
+        line_count=$(wc -l < "$temp_file")
+        if [ "$line_count" -lt "$max_lines" ]; then
+            for ((i=0; i<max_lines-line_count; i++)); do
+                echo "" >> "$temp_file"
+            done
+        fi
+    done
+
+    final_output="/work/user/fxricaut/Clarence/IBD/Final/Test/Cluster_${SUPouINF}_${CLUSTER_NUM}.txt"
+    > "$final_output"
+    paste "${temp_files[@]}" > "$final_output"
+    sed -i 's/\./,/g' "$final_output"
+
+    echo "Traitement terminé pour ${SUPouINF} Cluster ${CLUSTER_NUM}. Le fichier final est : $final_output"
+}
+
+# Boucle principale
+for SUPouINF in SUP INF; do
+    for CLUSTER_NUM in {1..13}; do
+        process_cluster "$SUPouINF" "$CLUSTER_NUM"
+    done
+done
