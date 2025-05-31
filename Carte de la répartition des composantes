@@ -1,0 +1,60 @@
+# ------------------- Installer les packages nécessaires -------------------
+packages <- c("sf", "ggplot2", "readr", "rnaturalearth", "rnaturalearthdata", "dplyr")
+
+install_if_missing <- function(pkg) {
+  if (!require(pkg, character.only = TRUE)) {
+    install.packages(pkg)
+    library(pkg, character.only = TRUE)
+  }
+}
+invisible(lapply(packages, install_if_missing))
+
+# ------------------- Charger les bibliothèques -------------------
+library(sf)
+library(ggplot2)
+library(readr)
+library(dplyr)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# ------------------- Lire et nettoyer le CSV -------------------
+points_df <- read_csv2("C:/Users/cdouguet/Desktop/Lowland.csv", show_col_types = FALSE)
+
+# Vérifie que les noms de colonnes sont bien ceux attendus
+names(points_df)[names(points_df) == "%"] <- "Percent"
+
+# Conversion propre
+points_df <- points_df %>%
+  mutate(
+    lon = as.numeric(gsub(",", ".", Longitude)),
+    lat = as.numeric(gsub(",", ".", Latitude))
+  ) %>%
+  filter(!is.na(lon), !is.na(lat))
+
+# ------------------- Convertir en objet sf -------------------
+points_sf <- st_as_sf(points_df, coords = c("lon", "lat"), crs = 4326)
+
+# ------------------- Télécharger la carte du monde -------------------
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# ------------------- Créer la carte -------------------
+ggplot(data = world) +
+  geom_sf(fill = "cornsilk", color = "gray30", size = 0.3) +
+  geom_sf(data = points_sf, color = "red", size = 1.25) +
+  coord_sf(
+    xlim = c(90, 170),   # Limites en longitude
+    ylim = c(-15, 15),   # Limites en latitude
+    expand = FALSE
+  ) +
+  labs(
+    title = "Carte de l'origine des prélèvements",
+    x = "Longitude",
+    y = "Latitude",
+    caption = "Source : Natural Earth & Données utilisateur"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "aliceblue"),
+    panel.grid.major = element_line(color = "white"),
+    axis.title = element_text(size = 12, face = "bold")
+  )
