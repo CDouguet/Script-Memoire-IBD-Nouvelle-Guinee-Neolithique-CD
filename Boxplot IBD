@@ -1,0 +1,59 @@
+# Charger les bibliothèques nécessaires
+library(tidyverse)
+
+# Lire les données sans noms de colonnes au début
+data_file <- "C:/Users/cdouguet/Desktop/6INF.csv"
+data <- read_delim(data_file, delim = ";", col_types = cols(.default = col_character()), col_names = FALSE)
+
+# Utiliser la première ligne comme noms de colonnes
+colnames(data) <- as.character(data[1, ])
+data <- data[-1, ]
+
+# Extraire les noms de colonnes (clusters)
+cluster_cols <- colnames(data)
+
+# Initialiser le tableau de comptage
+count_data <- tibble()
+
+# Boucle : compter le nombre de valeurs non vides/non NA par cluster
+for (col_name in cluster_cols) {
+    count <- sum(!is.na(data[[col_name]]) & data[[col_name]] != "")
+    count_data <- bind_rows(count_data, tibble(cluster = col_name, n = count))
+}
+
+# Trier les clusters par nombre décroissant
+count_data <- count_data %>%
+    mutate(cluster = factor(cluster, levels = cluster[order(-n)]))
+
+# Palette avec vos noms et couleurs précédemment validées
+colors <- c(
+    "Wallacea" = "#D95F02",           # Orange foncé
+    "Lowland (Sepik)" = "#1B9E77",    # Vert sapin
+    "Western Fly" = "#E7298A",        # Rose foncé
+    "Western Highland" = "#66A61E",   # Vert olive
+    "Simbu" = "#7570B3",              # Violet bleuté
+    "Bougainville" = "#E6AB02",       # Jaune foncé
+    "New Britain" = "#A6761D",        # Brun doré
+    "Bismarck" = "#666666",           # Gris foncé
+    "Mappi Korowai" = "#1F78B4",      # Bleu fort
+    "Birdstail" = "#E31A1C",          # Rouge vif
+    "Cenderewasih Bay" = "#6A3D9A",   # Violet profond
+    "Eufrasie" = "#B15928",           # Marron
+    "West Indonesia" = "#33A02C"      # Vert vif
+)
+
+# Barplot du nombre d'IBD par cluster
+ggplot(count_data, aes(x = cluster, y = n, fill = cluster)) +
+    geom_col() +
+    geom_text(aes(label = n), vjust = -0.3, size = 3.5) +
+    theme_minimal() +
+    scale_fill_manual(values = colors) +
+    labs(
+        title = "Nombre d'IBD partagés avec le Cluster Simbu dont la taille est (<5Mb)",
+        x = "Cluster",
+        y = "Nombre d'IBD"
+    ) +
+    theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none"
+    )
